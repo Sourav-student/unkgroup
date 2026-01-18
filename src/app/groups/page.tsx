@@ -2,42 +2,52 @@
 
 import { connectWS } from "@/helpers/connectWs";
 import { useEffect, useRef, useState } from "react";
-import toast from "react-hot-toast";
 import type { Socket } from "socket.io-client";
+import toast from "react-hot-toast";
+
+/* ---------- TYPES ---------- */
 
 interface ChatMessage {
   username: string;
   message: string;
 }
 
+interface UIMessage {
+  type: "system" | "chat";
+  text: string;
+}
+
+/* ---------- COMPONENT ---------- */
+
 export default function Groups() {
   const socket = useRef<Socket | null>(null);
   const typingTimeout = useRef<NodeJS.Timeout | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const [username, setUsername] = useState("");
   const [roomName, setRoomName] = useState("");
   const [joined, setJoined] = useState(false);
 
-  const [messages, setMessages] = useState<string[]>([]);
+  const [messages, setMessages] = useState<UIMessage[]>([]);
   const [message, setMessage] = useState("");
   const [typingUser, setTypingUser] = useState("");
 
+  /* ---------- SOCKET SETUP ---------- */
   useEffect(() => {
     if (!joined) return;
 
     socket.current = connectWS();
-
     socket.current.emit("joinRoom", { username, roomName });
 
-    socket.current.on("roomNotice", (name: string) => {
-      setMessages((prev) => [...prev, `${name} joined the room`]);
-      toast.success(`${name} Join the chat!`)
+    socket.current.on("roomNotice", (text: string) => {
+      setMessages((prev) => [...prev, { type: "system", text }]);
+      toast.success(text);
     });
 
     socket.current.on("chatMessage", (data: ChatMessage) => {
       setMessages((prev) => [
         ...prev,
-        `${data.username}: ${data.message}`,
+        { type: "chat", text: `${data.username}: ${data.message}` },
       ]);
     });
 
@@ -53,27 +63,34 @@ export default function Groups() {
       socket.current?.off();
       socket.current?.disconnect();
     };
-  }, [joined, roomName, username]);
+  }, [joined, username, roomName]);
 
+  /* ---------- AUTO SCROLL ---------- */
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, typingUser]);
+
+  /* ---------- SEND MESSAGE ---------- */
   const sendMessage = () => {
     if (!message.trim()) return;
 
-    socket.current?.emit("chatMessage", {
-      roomName,
-      message,
-    });
+    socket.current?.emit("chatMessage", { message });
 
-    setMessages((prev) => [...prev, `You: ${message}`]);
+    setMessages((prev) => [
+      ...prev,
+      { type: "chat", text: `You: ${message}` },
+    ]);
+
     setMessage("");
     socket.current?.emit("stopTyping");
   };
 
-  const handleTyping = () => {
+  /* ---------- TYPING HANDLER ---------- */
+  const handleTyping = (value: string) => {
+    setMessage(value);
     socket.current?.emit("typing");
 
-    if (typingTimeout.current) {
-      clearTimeout(typingTimeout.current);
-    }
+    if (typingTimeout.current) clearTimeout(typingTimeout.current);
 
     typingTimeout.current = setTimeout(() => {
       socket.current?.emit("stopTyping");
@@ -84,7 +101,7 @@ export default function Groups() {
   if (!joined) {
     return (
       <div className="flex min-h-[90vh] items-center justify-center">
-        <div className="p-6 rounded-xl shadow w-80 space-y-4">
+        <div className="p-6 rounded-xl shadow w-80 space-y-4 border">
           <h2 className="text-xl font-bold text-center">Join Chat</h2>
 
           <input
@@ -102,8 +119,9 @@ export default function Groups() {
           />
 
           <button
-            onClick={() => username && roomName && setJoined(true)}
-            className="w-full bg-black text-white py-2 rounded hover:bg-gray-800 cursor-pointer"
+            disabled={!username.trim() || !roomName.trim()}
+            onClick={() => setJoined(true)}
+            className="w-full bg-black text-white py-2 rounded disabled:opacity-50"
           >
             Join Room
           </button>
@@ -116,23 +134,32 @@ export default function Groups() {
   return (
     <div className="flex flex-col h-[80vh] rounded-2xl m-5 max-w-md border">
       {/* Header */}
-      <div className="p-4 border-b font-bold text-center rounded-t-2xl bg-black text-white">
+      <div className="p-4 font-bold text-center bg-black text-white rounded-t-2xl">
         Room: {roomName}
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-700">
+      <div className="flex-1 overflow-y-auto p-4 space-y-2 bg-gray-800">
         {messages.map((msg, i) => (
-          <div key={i} className="p-2 bg-stone-600 rounded">
-            {msg}
+          <div
+            key={i}
+            className={`p-2 rounded text-sm ${
+              msg.type === "system"
+                ? "bg-gray-600 text-center italic"
+                : "bg-gray-700"
+            }`}
+          >
+            {msg.text}
           </div>
         ))}
 
         {typingUser && (
-          <p className="text-sm italic text-gray-400">
+          <p className="text-xs italic text-gray-400">
             {typingUser} is typing...
           </p>
         )}
+
+        <div ref={bottomRef} />
       </div>
 
       {/* Input */}
@@ -140,13 +167,12 @@ export default function Groups() {
         <input
           className="flex-1 border rounded px-3 py-2"
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          onKeyDown={handleTyping}
+          onChange={(e) => handleTyping(e.target.value)}
           placeholder="Type a message..."
         />
         <button
           onClick={sendMessage}
-          className="bg-black text-white px-4 rounded cursor-pointer"
+          className="bg-black text-white px-4 rounded"
         >
           Send
         </button>
