@@ -5,8 +5,6 @@ import { useEffect, useRef, useState } from "react";
 import type { Socket } from "socket.io-client";
 import toast from "react-hot-toast";
 
-/* ---------- TYPES ---------- */
-
 interface ChatMessage {
   username: string;
   message: string;
@@ -16,8 +14,6 @@ interface UIMessage {
   type: "system" | "chat";
   text: string;
 }
-
-/* ---------- COMPONENT ---------- */
 
 export default function Groups() {
   const socket = useRef<Socket | null>(null);
@@ -32,7 +28,7 @@ export default function Groups() {
   const [message, setMessage] = useState("");
   const [typingUser, setTypingUser] = useState("");
 
-  /* ---------- SOCKET SETUP ---------- */
+
   useEffect(() => {
     if (!joined) return;
 
@@ -65,12 +61,10 @@ export default function Groups() {
     };
   }, [joined, username, roomName]);
 
-  /* ---------- AUTO SCROLL ---------- */
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, typingUser]);
 
-  /* ---------- SEND MESSAGE ---------- */
   const sendMessage = () => {
     if (!message.trim()) return;
 
@@ -85,7 +79,6 @@ export default function Groups() {
     socket.current?.emit("stopTyping");
   };
 
-  /* ---------- TYPING HANDLER ---------- */
   const handleTyping = (value: string) => {
     setMessage(value);
     socket.current?.emit("typing");
@@ -97,7 +90,6 @@ export default function Groups() {
     }, 1000);
   };
 
-  /* ---------- JOIN SCREEN ---------- */
   if (!joined) {
     return (
       <div className="flex min-h-[90vh] items-center justify-center">
@@ -130,7 +122,6 @@ export default function Groups() {
     );
   }
 
-  /* ---------- CHAT UI ---------- */
   return (
     <div className="flex flex-col h-[80vh] rounded-2xl m-5 max-w-md border">
       {/* Header */}
